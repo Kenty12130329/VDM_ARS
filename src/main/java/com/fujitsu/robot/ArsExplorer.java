@@ -329,7 +329,14 @@ public class ArsExplorer implements AutoCloseable {
                 return "mk_token(\"book_A\")";
             }
         } else if ("convenipayment".equals(modelName)) {
-            if ("pay".equals(opName)) {
+            if ("Scan".equals(opName)) {
+                // ConveniPayment44_ext の Scan(comp_code, cust_id, amt, check_digit)
+                long compCode = rand.nextInt(1000000);
+                long custId = rand.nextInt(1000000);
+                long amt = rand.nextInt(20000);
+                long checkDigit = rand.nextInt(10);
+                return String.format("%d, %d, %d, %d", compCode, custId, amt, checkDigit);
+            } else if ("pay".equals(opName)) {
                 // ConveniPayment.vdmpp (3つの引数: target_id, target_amount, check_digit)
                 long targetId = rand.nextInt(1000000);
                 long targetAmount = rand.nextInt(20000);

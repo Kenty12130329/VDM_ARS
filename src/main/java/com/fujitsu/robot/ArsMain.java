@@ -60,6 +60,8 @@ public class ArsMain {
             transitionCsvPath = "resources/transition_book_bug.csv";
         } else if (vdmPath.contains("book")) {
             transitionCsvPath = "resources/transition_book.csv";
+        } else if (vdmPath.contains("ConveniPayment44_ext")) {
+            transitionCsvPath = "resources/transition_convenipayment44_ext.csv";
         } else if (vdmPath.contains("ConveniPayment44_bug")) {
             transitionCsvPath = "resources/transition_convenipayment44_bug.csv";
         } else if (vdmPath.contains("ConveniPayment44")) {
