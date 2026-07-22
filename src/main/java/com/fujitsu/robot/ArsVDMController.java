@@ -21,7 +21,12 @@ public class ArsVDMController implements VDMController, AutoCloseable {
         this.vdmPath = vdmPath;
         
         List<String> vars = new ArrayList<>();
-        if (vdmPath.toLowerCase().contains("convenipayment44")) {
+        if (vdmPath.toLowerCase().contains("convenipayment44_ext")) {
+            this.className = "ConveniPayment44_ext";
+            vars.add("pending_invoices");
+            vars.add("paid_invoices");
+            vars.add("current_session");
+        } else if (vdmPath.toLowerCase().contains("convenipayment44")) {
             this.className = "ConveniPayment44";
             vars.add("pending_invoices");
             vars.add("paid_invoices");
