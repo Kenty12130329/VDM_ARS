@@ -1,0 +1,7 @@
+=== Random Search Exploration Statistics ===
+Exploration Time: 1822 ms
+Total Steps Executed: 4
+Max Depth Limit: 10
+Violation Detected: true
+Violation Details: Student has borrowed 2 books (Limit: 1). Student record: mk_student(1, true, mk_token("sato"), {mk_token("book_A"), mk_token("book_B")}, false)
+=============================================

@@ -20,23 +20,17 @@ public class ArsVDMController implements VDMController, AutoCloseable {
         this.jarPath = jarPath;
         this.vdmPath = vdmPath;
         
+        String detectedClass = extractClassNameFromVdmpp(vdmPath);
+        this.className = detectedClass;
+        
         List<String> vars = new ArrayList<>();
-        if (vdmPath.toLowerCase().contains("convenipayment44_ext")) {
-            this.className = "ConveniPayment44_ext";
+        if (detectedClass.toLowerCase().contains("convenipayment")) {
             vars.add("pending_invoices");
             vars.add("paid_invoices");
-            vars.add("current_session");
-        } else if (vdmPath.toLowerCase().contains("convenipayment44")) {
-            this.className = "ConveniPayment44";
-            vars.add("pending_invoices");
-            vars.add("paid_invoices");
-            vars.add("current_session");
-        } else if (vdmPath.toLowerCase().contains("convenipayment")) {
-            this.className = "ConveniPayment";
-            vars.add("pending_invoices");
-            vars.add("paid_invoices");
+            if (contentHasField(vdmPath, "current_session")) {
+                vars.add("current_session");
+            }
         } else {
-            this.className = "alla";
             vars.add("starting");
             vars.add("student_login_status");
             vars.add("borrowable_books");
@@ -45,6 +39,29 @@ public class ArsVDMController implements VDMController, AutoCloseable {
             vars.add("continued_login_confirmation");
         }
         this.variableNames = vars;
+    }
+
+    private String extractClassNameFromVdmpp(String vdmPath) {
+        try {
+            String content = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(vdmPath)), "UTF-8");
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile("class\\s+([A-Za-z0-9_]+)");
+            java.util.regex.Matcher m = p.matcher(content);
+            if (m.find()) {
+                return m.group(1);
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return "ConveniPayment44";
+    }
+
+    private boolean contentHasField(String vdmPath, String fieldName) {
+        try {
+            String content = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(vdmPath)), "UTF-8");
+            return content.contains(fieldName);
+        } catch (Exception e) {
+            return false;
+        }
     }
     
     @Override

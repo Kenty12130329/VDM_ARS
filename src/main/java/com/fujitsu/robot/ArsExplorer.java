@@ -28,8 +28,8 @@ public class ArsExplorer implements AutoCloseable {
 
     public ArsExplorer(String jarPath, String vdmPath, String transitionCsvPath) throws Exception {
         this.controller = new ArsVDMController(jarPath, vdmPath);
-        this.targetOperations = loadOperationsFromCsv(transitionCsvPath);
-        
+        this.targetOperations = loadOperations(vdmPath, transitionCsvPath);
+
         // モデル名の判定（book または convenipayment）
         String lowerVdm = vdmPath.toLowerCase();
         if (lowerVdm.contains("book")) {
@@ -39,9 +39,57 @@ public class ArsExplorer implements AutoCloseable {
         } else {
             this.modelName = "unknown";
         }
-        
+
         System.out.println("[ARS] Loaded " + targetOperations.size() + " operations: " + targetOperations);
         System.out.println("[ARS] Target model: " + modelName);
+    }
+
+    private List<String> loadOperations(String vdmPath, String csvPath) {
+        if (csvPath != null && new File(csvPath).exists()) {
+            List<String> ops = loadOperationsFromCsv(csvPath);
+            if (!ops.isEmpty()) {
+                System.out.println("[ARS] Operations loaded from CSV: " + csvPath);
+                return ops;
+            }
+        }
+
+        System.out.println("[ARS] CSV not found or empty. Extracting operations directly from " + vdmPath + "...");
+        List<String> extracted = extractOperationsFromVdmpp(vdmPath);
+        System.out.println("[ARS] Dynamically extracted operations: " + extracted);
+        return extracted;
+    }
+
+    private List<String> extractOperationsFromVdmpp(String vdmPath) {
+        List<String> ops = new ArrayList<>();
+        try {
+            String content = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(vdmPath)), "UTF-8");
+            int opIdx = content.indexOf("operations");
+            if (opIdx != -1) {
+                String opSection = content.substring(opIdx);
+                int endIdx = -1;
+                for (String sec : new String[] { "functions", "values", "types", "end " }) {
+                    int idx = opSection.indexOf(sec);
+                    if (idx != -1 && (endIdx == -1 || idx < endIdx)) {
+                        endIdx = idx;
+                    }
+                }
+                if (endIdx != -1) {
+                    opSection = opSection.substring(0, endIdx);
+                }
+
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile("public\\s+([A-Za-z0-9_]+)\\s*:");
+                java.util.regex.Matcher m = p.matcher(opSection);
+                while (m.find()) {
+                    String name = m.group(1);
+                    if (!ops.contains(name)) {
+                        ops.add(name);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[ARS] Failed to extract operations from VDM-PP: " + e.getMessage());
+        }
+        return ops;
     }
 
     /**
@@ -71,8 +119,8 @@ public class ArsExplorer implements AutoCloseable {
     /**
      * ランダム探索を実行する。
      * 
-     * @param maxDepth 各エピソード（パス）での最大深さ
-     * @param maxRuns  最大試行（エピソード）回数
+     * @param maxDepth 各パスでの最大深さ
+     * @param maxRuns  最大試行回数
      */
     public void explore(int maxDepth, int maxRuns) {
         long startTime = System.currentTimeMillis();
@@ -121,7 +169,7 @@ public class ArsExplorer implements AutoCloseable {
                     violationDetected = true;
                     System.out.println("[ARS] Invariant violation detected at run " + run + ", step " + step + "!");
                     System.out.println("[ARS] Reason: " + violationMessage);
-                    
+
                     // トレース出力
                     saveFoundTrace(runPath, variables);
                     break;
@@ -182,7 +230,7 @@ public class ArsExplorer implements AutoCloseable {
             if (studentLoginStatusVal != null) {
                 String studentLoginStatus = studentLoginStatusVal.toString();
                 System.out.println("  [Debug] student_login_status: " + studentLoginStatus);
-                
+
                 // ネストされた括弧を考慮して mk_student(...) を正しく切り出す
                 List<String> students = new ArrayList<>();
                 int idx = 0;
@@ -192,7 +240,8 @@ public class ArsExplorer implements AutoCloseable {
                     int end = -1;
                     for (int i = idx + 11; i < studentLoginStatus.length(); i++) {
                         char c = studentLoginStatus.charAt(i);
-                        if (c == '(') parenDepth++;
+                        if (c == '(')
+                            parenDepth++;
                         else if (c == ')') {
                             parenDepth--;
                             if (parenDepth == 0) {
@@ -209,7 +258,6 @@ public class ArsExplorer implements AutoCloseable {
                     }
                 }
 
-                
                 for (String studentStr : students) {
                     System.out.println("    [Debug] parsed student record: " + studentStr);
                     // studentStr 内の mk_token の出現回数をカウント
@@ -224,7 +272,8 @@ public class ArsExplorer implements AutoCloseable {
                     int borrowingCount = tokenCount - 1;
                     System.out.println("    [Debug] borrowingCount: " + borrowingCount);
                     if (borrowingCount > 1) {
-                        violationMessage = "Student has borrowed " + borrowingCount + " books (Limit: 1). Student record: " + studentStr;
+                        violationMessage = "Student has borrowed " + borrowingCount
+                                + " books (Limit: 1). Student record: " + studentStr;
                         return true;
                     }
                 }
@@ -236,10 +285,10 @@ public class ArsExplorer implements AutoCloseable {
             if (pendingVal != null && paidVal != null) {
                 String pendingStr = pendingVal.toString();
                 String paidStr = paidVal.toString();
-                
+
                 List<Invoice> pendingList = parseInvoices(pendingStr);
                 List<Invoice> paidList = parseInvoices(paidStr);
-                
+
                 for (Invoice pinv : pendingList) {
                     for (Invoice qinv : paidList) {
                         // 重複チェック
@@ -249,7 +298,8 @@ public class ArsExplorer implements AutoCloseable {
                             isDuplicate = pinv.custId.equals(qinv.custId);
                         } else {
                             // ConveniPayment44 (3引数) の場合: company_code と customer_id で比較
-                            isDuplicate = pinv.custId.equals(qinv.custId) && pinv.dueDateOrCompCode.equals(qinv.dueDateOrCompCode);
+                            isDuplicate = pinv.custId.equals(qinv.custId)
+                                    && pinv.dueDateOrCompCode.equals(qinv.dueDateOrCompCode);
                         }
                         if (isDuplicate) {
                             violationMessage = "Duplicate invoice found in both pending and paid: ID=" + pinv.custId;
@@ -265,18 +315,20 @@ public class ArsExplorer implements AutoCloseable {
     private static class Invoice {
         String custId;
         String dueDateOrCompCode;
-        Invoice(String c, String d) { 
-            this.custId = c; 
-            this.dueDateOrCompCode = d; 
+
+        Invoice(String c, String d) {
+            this.custId = c;
+            this.dueDateOrCompCode = d;
         }
     }
-    
+
     private List<Invoice> parseInvoices(String str) {
         List<Invoice> list = new ArrayList<>();
         // 2つまたは3つの引数を持つ mk_invoice を探す
         // 例: mk_invoice(123456, 3000)
         // 例: mk_invoice(123456, 100001, 3000)
-        java.util.regex.Pattern p = java.util.regex.Pattern.compile("mk_invoice\\(\\s*(\\d+)\\s*,\\s*(?:(\\d+)\\s*,\\s*)?(\\d+)\\s*\\)");
+        java.util.regex.Pattern p = java.util.regex.Pattern
+                .compile("mk_invoice\\(\\s*(\\d+)\\s*,\\s*(?:(\\d+)\\s*,\\s*)?(\\d+)\\s*\\)");
         java.util.regex.Matcher m = p.matcher(str);
         while (m.find()) {
             if (m.group(2) != null) {
@@ -445,12 +497,13 @@ public class ArsExplorer implements AutoCloseable {
     }
 
     private void exportVariableHistory() {
-        if (variableHistory.isEmpty()) return;
+        if (variableHistory.isEmpty())
+            return;
         try (PrintWriter pw = new PrintWriter(new FileWriter("variable_history.csv"))) {
             // ヘッダーの出力
             Map<String, String> firstEntry = variableHistory.get(0);
             pw.println(String.join(",", firstEntry.keySet()));
-            
+
             // データの出力
             for (Map<String, String> entry : variableHistory) {
                 List<String> values = new ArrayList<>();

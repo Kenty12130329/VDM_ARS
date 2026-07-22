@@ -15,8 +15,8 @@ public class ArsMain {
 
         if (args.length == 0) {
             System.out.println("使用方法: java com.fujitsu.robot.ArsMain <vdmpp_file> [max_depth] [max_runs]");
-            System.out.println("デフォルトとして resources/book_f1.vdmpp を使用します。");
-            args = new String[]{"resources/book_f1.vdmpp"};
+            System.out.println("デフォルトとして resources/book.vdmpp を使用します。");
+            args = new String[] { "resources/book.vdmpp" };
         }
 
         String vdmPath = args[0];
@@ -52,22 +52,12 @@ public class ArsMain {
 
         // VDMファイル名に応じた transition.csv の設定
         String transitionCsvPath = "resources/transition.csv";
-        if (vdmPath.contains("book_f1")) {
-            transitionCsvPath = "resources/transition_book_f1.csv";
-        } else if (vdmPath.contains("book_f2")) {
-            transitionCsvPath = "resources/transition_book_f2.csv";
-        } else if (vdmPath.contains("book_bug")) {
-            transitionCsvPath = "resources/transition_book_bug.csv";
-        } else if (vdmPath.contains("book")) {
+        if (vdmPath.contains("book")) {
             transitionCsvPath = "resources/transition_book.csv";
-        } else if (vdmPath.contains("ConveniPayment44_ext")) {
-            transitionCsvPath = "resources/transition_convenipayment44_ext.csv";
         } else if (vdmPath.contains("ConveniPayment44_bug")) {
             transitionCsvPath = "resources/transition_convenipayment44_bug.csv";
         } else if (vdmPath.contains("ConveniPayment44")) {
             transitionCsvPath = "resources/transition_convenipayment44.csv";
-        } else if (vdmPath.contains("ConveniPayment")) {
-            transitionCsvPath = "resources/transition_convenipayment.csv";
         }
 
         System.out.println("[Config] Transition CSV: " + transitionCsvPath);
