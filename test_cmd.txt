@@ -1,0 +1,3 @@
+create test := new alla()  
+print test.get_student_login_status()  
+quit  

@@ -1,0 +1,39 @@
+-- 正常
+
+
+
+-- エラーあり。
+
+class TestSetHard
+
+instance variables
+    -- 2つのグループ。初期状態では混ざっていない。
+    public set_A : set of int := {1, 2, 3};
+    public set_B : set of int := {10, 20};
+
+    -- 不変条件: AとBの共通部分(intersection)は空集合であること
+    -- これにより、同じ数値が両方に存在することを禁止する
+    inv set_A inter set_B = {};
+
+operations
+    -- 1. [Safe] AからBへ要素を正しく「移動」する
+    -- Aから消して、Bに足す。交差は発生しないので安全。
+    public MoveAtoB: int ==> ()
+    MoveAtoB(x) == (
+        if x in set set_A then (
+            set_A := set_A \ {x};      -- 削除
+            set_B := set_B union {x};  -- 追加
+        )
+    );
+
+    -- 2. [Unsafe] Aの内容をBに「コピー」してしまう（意図的なバグ）
+    -- Aから消し忘れているため、x は A と B 両方に存在することになり、不変条件違反！
+    public CopyAtoB_Bug: int ==> ()
+    CopyAtoB_Bug(x) == (
+        if x in set set_A then (
+            -- set_A := set_A \ {x};  <-- 【バグ】削除を忘れている！
+            set_B := set_B union {x};
+        )
+    );
+
+end TestSetHard

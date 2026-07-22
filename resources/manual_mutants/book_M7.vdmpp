@@ -1,0 +1,223 @@
+-- ================================================================
+-- M7
+-- 
+-- 【注入されたバグ】
+-- データフロー異常 (Data Flow):
+-- borrow_book で borrower_name に nil を代入
+--
+-- 正しい仕様: 借りた人の名前を記録する
+-- バグ版: 名前が消える (nilになる)
+--
+-- 期待される検出:
+-- 本の所有者情報が失われることによる不整合
+-- ================================================================
+
+class book_M7
+
+
+
+types
+
+    -- dfのtypesの部分
+
+
+
+    -- dfのtokenの内容
+    public book::
+
+        book_name : token
+        borrower_name : [token];
+
+    public student::
+
+        num : nat
+        student_or_not : bool
+        human_name : token
+        borrowing_books : set of token
+        login_or_not : bool;
+
+
+
+instance variables
+    public history : seq of token := [];
+-- dfに保存されている大域変数
+
+-- placeとして作成する大域変数
+    public starting : set of student := {};
+    public student_login_status : set of student := {mk_student(1, true, mk_token("sato"), {}, false), mk_student(2, true, mk_token("suzuki"), {}, false)};
+    public borrowable_books : set of book := {mk_book(mk_token("book_A"), nil), mk_book(mk_token("book_B"), nil)};
+    public borrowed_books : set of book := {};
+    public guest_user_login_status : set of student := {};
+    public continued_login_confirmation : set of student := {};
+
+-- dfに保存されている大域変数の不変条件
+
+-- placeの不変条件: 1人が同時に借りられるのは1冊まで
+    -- placeの不変条件: 1人が同時に借りられるのは1冊まで、かつ貸出中の本には借り主が存在する
+    inv (forall s in set student_login_status & card(s.borrowing_books) <= 1)
+        and (forall b in set borrowed_books & b.borrower_name <> nil);
+
+
+operations
+
+    public admission:  () ==> ()
+        admission() == (
+            dcl at_starting: student := 
+                let at in set starting be st 
+                    forall p in set starting & at.num <= p.num 
+                in at;
+            -- delete token
+            starting := starting \ {at_starting};
+            -- action
+            history := history ^ [mk_token("admission_0")]; at_starting.student_or_not := true;
+
+            -- additional token
+            starting := starting union {at_starting};
+        )
+        pre
+            (let at in set starting be st forall p in set starting & at.num <= p.num in at).student_or_not = false;
+
+    public return_book:  token ==> ()
+        return_book(return_booking) == (
+            dcl at_student_login_status: student := 
+                let at in set student_login_status be st 
+                    return_booking in set at.borrowing_books 
+                in at;
+            dcl at_borrowed_books: book := 
+                let at in set borrowed_books be st 
+                    at.book_name = return_booking  
+                in at;
+            -- delete token
+            student_login_status := student_login_status \ {at_student_login_status};
+            borrowed_books := borrowed_books \ {at_borrowed_books};
+            -- action
+            history := history ^ [mk_token("return_book_0")]; at_borrowed_books.borrower_name := nil;
+            at_student_login_status.borrowing_books := at_student_login_status.borrowing_books \ {return_booking};
+
+            -- additional token
+            continued_login_confirmation := continued_login_confirmation union {at_student_login_status};
+            borrowable_books := borrowable_books union {at_borrowed_books};
+        )
+        pre
+            exists x in set student_login_status & return_booking in set x.borrowing_books;
+
+    public continue:  () ==> ()
+        continue() == (
+            dcl at_continued_login_confirmation: student := 
+                let at in set continued_login_confirmation in at;
+            -- delete token
+            continued_login_confirmation := continued_login_confirmation \ {at_continued_login_confirmation};
+            -- action
+            history := history ^ [mk_token("continue_0")]; 
+            -- additional token
+            student_login_status := student_login_status union {at_continued_login_confirmation};
+        );
+
+    public expulsion:  () ==> ()
+        expulsion() == (
+            dcl at_starting: student := 
+                let at in set starting be st 
+                    forall p in set starting & at.num <= p.num 
+                in at;
+            -- delete token
+            starting := starting \ {at_starting};
+            -- action
+            history := history ^ [mk_token("expulsion_0")]; at_starting.student_or_not := false;
+
+            -- additional token
+            starting := starting union {at_starting};
+        )
+        pre
+            ((let at in set starting be st forall p in set starting & at.num <= p.num in at).student_or_not = true) and (card ((let at in set starting be st forall p in set starting & at.num <= p.num in at).borrowing_books) = 0);
+
+    public login_as_a_guest_user:  () ==> ()
+        login_as_a_guest_user() == (
+            dcl at_starting: student := 
+                let at in set starting be st 
+                    forall p in set starting & at.num <= p.num 
+                in at;
+            -- delete token
+            starting := starting \ {at_starting};
+            -- action
+            history := history ^ [mk_token("login_as_a_guest_user_0")]; at_starting.login_or_not := true;
+
+            -- additional token
+            guest_user_login_status := guest_user_login_status union {at_starting};
+        )
+        pre
+            ((let at in set starting be st forall p in set starting & at.num <= p.num in at).student_or_not = false);
+
+    public logout_guest_user:  () ==> ()
+        logout_guest_user() == (
+            dcl at_guest_user_login_status: student := 
+                let at in set guest_user_login_status in at;
+            -- delete token
+            guest_user_login_status := guest_user_login_status \ {at_guest_user_login_status};
+            -- action
+            history := history ^ [mk_token("logout_guest_user_0")]; at_guest_user_login_status.login_or_not := false;
+
+            -- additional token
+            starting := starting union {at_guest_user_login_status};
+        );
+
+    public borrow_book:  token ==> ()
+        borrow_book(borrow_booking) == (
+            dcl at_student_login_status: student := 
+                let at in set student_login_status be st 
+                    card(at.borrowing_books) = 0
+                in at;
+            dcl at_borrowable_books: book := 
+                let at in set borrowable_books be st 
+                    at.book_name = borrow_booking 
+                in at;
+            -- delete token
+            student_login_status := student_login_status \ {at_student_login_status};
+            borrowable_books := borrowable_books \ {at_borrowable_books};
+            -- action
+            history := history ^ [mk_token("borrow_book_0")]; at_borrowable_books.borrower_name := nil;
+            at_student_login_status.borrowing_books := at_student_login_status.borrowing_books union {at_borrowable_books.book_name};
+            -- 更新済みレコードをstudent_login_statusに再追加（不変条件チェック用）
+            student_login_status := student_login_status union {at_student_login_status};
+
+            -- additional token
+            continued_login_confirmation := continued_login_confirmation union {at_student_login_status};
+            borrowed_books := borrowed_books union {at_borrowable_books};
+        )
+        pre exists x in set student_login_status & card(x.borrowing_books) = 0;
+
+    public login_as_a_student:  () ==> ()
+        login_as_a_student() == (
+            dcl at_starting: student := 
+                let at in set starting be st 
+                    forall p in set starting & at.num <= p.num 
+                in at;
+            -- delete token
+            starting := starting \ {at_starting};
+            -- action
+            history := history ^ [mk_token("login_as_a_student_0")]; 
+            -- additional token
+            student_login_status := student_login_status union {at_starting};
+        )
+        pre
+            ((let at in set starting be st forall p in set starting & at.num <= p.num in at).student_or_not = true);
+
+    public logout_student:  () ==> ()
+        logout_student() == (
+            dcl at_continued_login_confirmation: student := 
+                let at in set continued_login_confirmation in at;
+            -- delete token
+            continued_login_confirmation := continued_login_confirmation \ {at_continued_login_confirmation};
+            -- action
+            history := history ^ [mk_token("logout_student_0")]; at_continued_login_confirmation.login_or_not := false;
+            -- additional token
+            starting := starting union {at_continued_login_confirmation};
+        )
+        pre
+            forall a in set continued_login_confirmation & a.login_or_not = true;
+
+
+functions
+
+    
+
+end book_M7

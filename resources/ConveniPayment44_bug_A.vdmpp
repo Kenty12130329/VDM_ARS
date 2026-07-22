@@ -1,0 +1,128 @@
+-- コンビニ収納代行システム(Type A)
+-- ConveniPayment44_bug_A.vdmpp
+-- 
+-- 安全性違反 (Safety Violation):
+-- レシート発行(IssueReceipt)時に、支払った請求書を
+-- 「未払いリスト(pending_invoices)」から削除し忘れる。
+-- これにより、同じ請求書が「未払い」と「支払い済み」の両方に存在することになり、
+-- 不変条件 (inv) に違反する。
+
+class ConveniPayment44
+
+types
+    -- 請求データベースレコード
+    public invoice ::
+        company_code : nat
+        customer_id : nat
+        amount : nat;
+
+    -- セッション情報 (stage: 0=NONE, 1=SCANNED, 2=CHECKED, 3=DB_OK, 4=PAID)
+    public Session ::
+        stage : nat
+        comp_code : nat
+        cust_id : nat
+        amount : nat
+        check_digit : nat
+        paid_amount : nat;
+
+instance variables
+    -- 未払い請求データベース
+    public pending_invoices : set of invoice := {
+        mk_invoice(123456, 100001, 3000),   -- CD=8
+        mk_invoice(123456, 100002, 5500),   -- CD=8
+        mk_invoice(789012, 200001, 12000)   -- CD=3
+    };
+    
+    -- 支払済み請求
+    public paid_invoices : set of invoice := {};
+
+    -- 現在のセッション
+    public current_session : Session := mk_Session(0, 0, 0, 0, 0, 0);
+
+    -- 不変条件
+    inv forall p in set pending_invoices, q in set paid_invoices &
+        not (p.company_code = q.company_code and p.customer_id = q.customer_id);
+
+operations
+    -- 1. バーコード読み取り (Scan)
+    public Scan: () ==> ()
+    Scan() == (
+        -- pending_invoicesから任意の1件を選択する（Z3に選ばせる）
+        dcl target: invoice := 
+            let x in set pending_invoices in x;
+        
+        -- 選択した請求書情報に基づいて、正しいチェックデジットを計算してセッション開始
+        dcl valid_cd: nat := CheckDigit(target.company_code, target.customer_id, target.amount);
+        
+        current_session := mk_Session(1, target.company_code, target.customer_id, target.amount, valid_cd, 0);
+    )
+    pre current_session.stage = 0 
+    and pending_invoices <> {};
+
+    -- 2. チェックデジット検証 (VerifyCheckDigit)
+    public VerifyCheckDigit: () ==> ()
+    VerifyCheckDigit() == (
+        current_session.stage := 2;
+    )
+    pre current_session.stage = 1;
+
+    -- 3. データベース照合 (CheckDB)
+    public CheckDB: () ==> ()
+    CheckDB() == (
+        current_session.stage := 3;
+    )
+    pre current_session.stage = 2;
+
+    -- 4. 支払い実行 (Pay)
+    public Pay: nat ==> ()
+    Pay(cash) == (
+        current_session.stage := 4;
+        current_session.paid_amount := cash;
+    )
+    pre current_session.stage = 3 and cash >= current_session.amount;
+
+    -- 5. レシート発行・完了 (IssueReceipt)
+    public IssueReceipt: () ==> ()
+    IssueReceipt() == (
+        dcl target_inv: invoice := mk_invoice(current_session.comp_code, current_session.cust_id, current_session.amount);
+        
+        -- バグ: DBから削除し忘れる (不変条件違反の原因)
+        -- pending_invoices := pending_invoices \ {target_inv};
+        paid_invoices := paid_invoices union {target_inv};
+        
+        -- セッションリセット
+        current_session := mk_Session(0, 0, 0, 0, 0, 0);
+    )
+    pre current_session.stage = 4;
+
+functions
+    -- モジュラス10ウェイト3・1 計算
+    public CheckDigit: nat * nat * nat -> nat
+    CheckDigit(comp_code, cust_id, amt) ==
+        (10 - (
+            -- Amount (下位6桁): Weights 3,1,3,1,3,1
+               ((amt mod 10)*3 +
+                ((amt div 10) mod 10)*1 +
+                ((amt div 100) mod 10)*3 +
+                ((amt div 1000) mod 10)*1 +
+                ((amt div 10000) mod 10)*3 +
+                ((amt div 100000) mod 10)*1) +
+
+            -- Customer ID (中位6桁): Weights 3,1,3,1,3,1
+               ((cust_id mod 10)*3 +
+                ((cust_id div 10) mod 10)*1 +
+                ((cust_id div 100) mod 10)*3 +
+                ((cust_id div 1000) mod 10)*1 +
+                ((cust_id div 10000) mod 10)*3 +
+                ((cust_id div 100000) mod 10)*1) +
+
+            -- Company Code (上位6桁): Weights 3,1,3,1,3,1
+               ((comp_code mod 10)*3 +
+                ((comp_code div 10) mod 10)*1 +
+                ((comp_code div 100) mod 10)*3 +
+                ((comp_code div 1000) mod 10)*1 +
+                ((comp_code div 10000) mod 10)*3 +
+                ((comp_code div 100000) mod 10)*1)
+        ) mod 10) mod 10;
+
+end ConveniPayment44

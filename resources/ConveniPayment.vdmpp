@@ -1,0 +1,72 @@
+-- ============================================================
+-- コンビニ収納代行システム (Convenience Store Payment System)
+-- ============================================================
+-- 規格準拠: JIS X 0504, ISO/IEC 15417, GS1 Japan ガイドライン
+-- チェックデジット計算: モジュラス10 ウェイト3・1 (JIS X 0502準拠)
+--
+-- EPNATモデル構成:
+--   - ガード条件A: チェックデジット検証（形式チェック）
+--   - ガード条件B: DB照合（ID・金額一致による消込チェック）
+-- ============================================================
+
+class ConveniPayment
+
+types
+    -- 請求データレコード
+    public invoice::
+        invoice_id : nat
+        amount : nat;
+
+instance variables
+    -- 未払い請求データベース
+    -- 各IDに対して正しいチェックデジット:
+    --   123456 -> CD=5, 234567 -> CD=6, 345678 -> CD=7
+    public pending_invoices : set of invoice := {
+        mk_invoice(123456, 3000),
+        mk_invoice(234567, 5500),
+        mk_invoice(345678, 12000)
+    };
+    
+    -- 支払済み請求
+    public paid_invoices : set of invoice := {};
+
+    -- 不変条件: 同一IDが二重に存在しない
+    inv forall p in set pending_invoices, q in set paid_invoices &
+        p.invoice_id <> q.invoice_id;
+
+operations
+    -- ============================================================
+    -- 支払いオペレーション (pay)
+    -- ============================================================
+    -- パラメータ:
+    --   target_id     : 払込票に印字されたID（6桁）
+    --   target_amount : 払込票に印字された金額
+    --   check_digit   : チェックデジット（1桁: 0-9）
+    --
+    -- ガード条件A: モジュラス10 ウェイト3・1 検証
+    --   d1=右端, d2, d3, d4, d5, d6=左端
+    --   weighted_sum = d1*3 + d2*1 + d3*3 + d4*1 + d5*3 + d6*1
+    --   expected_cd = (10 - (weighted_sum mod 10)) mod 10
+    --
+    -- ガード条件B: ID・金額がDBに存在
+    -- ============================================================
+    public pay: nat * nat * nat ==> ()
+    pay(target_id, target_amount, check_digit) == (
+        dcl target_invoice: invoice := mk_invoice(target_id, target_amount);
+        
+        pending_invoices := pending_invoices \ {target_invoice};
+        paid_invoices := paid_invoices union {target_invoice}
+    )
+    pre 
+        -- ガード条件A: モジュラス10 ウェイト3・1 チェックデジット検証
+        check_digit = (10 - ((target_id mod 10) * 3 + 
+                            ((target_id div 10) mod 10) * 1 + 
+                            ((target_id div 100) mod 10) * 3 + 
+                            ((target_id div 1000) mod 10) * 1 + 
+                            ((target_id div 10000) mod 10) * 3 + 
+                            ((target_id div 100000) mod 10) * 1) mod 10) mod 10
+        and
+        -- ガード条件B: DB照合
+        mk_invoice(target_id, target_amount) in set pending_invoices;
+
+end ConveniPayment

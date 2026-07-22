@@ -1,0 +1,47 @@
+class TestMapRecordSafe
+
+types
+    public User ::
+        id : int
+        score : int;
+
+instance variables
+    -- IDからUserレコードへのマップ
+    public user_db : map int to User := {
+        1 |-> mk_User(1, 100),
+        2 |-> mk_User(2, 200)
+    };
+
+    -- 不変条件: 全員のスコアは0以上であること
+    inv forall id in set dom user_db & user_db(id).score >= 0;
+
+operations
+    -- [Safe] 特定のユーザーのスコアを更新する（正の値のみ）
+    public UpdateScore: int * int ==> ()
+    UpdateScore(targetId, newScore) == (
+        dcl u : User;
+        -- マップのキー存在確認とスコアの正値確認
+        if targetId in set dom user_db and newScore >= 0 then (
+            -- 1. 取得 (Read)
+            u := user_db(targetId);
+            
+            -- 2. レコード更新 (Record Update)
+            u.score := newScore;
+            
+            -- 3. マップ更新 (Map Update)
+            user_db(targetId) := u;
+        )
+    );
+
+    -- [Safe] スコアを10増加する
+    public BoostScore: int ==> ()
+    BoostScore(targetId) == (
+        dcl u : User;
+        if targetId in set dom user_db then (
+            u := user_db(targetId);
+            u.score := u.score + 10;  -- 常に正の値を加算
+            user_db(targetId) := u;
+        )
+    );
+
+end TestMapRecordSafe

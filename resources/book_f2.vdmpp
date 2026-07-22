@@ -1,0 +1,123 @@
+-- ================================================================
+-- F2
+-- 
+-- 【注入されたバグ】
+-- 検証条件C2（活性）違反:
+-- 「いつかは生徒はログアウトする」ルールを破る
+--
+-- 正しい仕様: logout_student が実行可能であること
+-- バグ版: logout_student の事前条件を到達不能条件に変更
+--        （永遠にログアウトできない）
+--
+-- 期待される検出:
+-- 探索で「logout_student」が一度も実行されないことを検出
+-- ================================================================
+
+class alla
+
+
+types
+
+    -- dfのtokenの内容
+    public book::
+
+        book_name : token
+        borrower_name : [token];
+
+    public student::
+
+        num : nat
+        student_or_not : bool
+        human_name : token
+        borrowing_books : set of token
+        login_or_not : bool;
+
+
+
+instance variables
+    public history : seq of token := [];
+
+-- placeとして作成する大域変数
+    public starting : set of student := {};
+    public student_login_status : set of student := {mk_student(1, true, mk_token("sato"), {}, false), mk_student(2, true, mk_token("suzuki"), {}, false)};
+    public borrowable_books : set of book := {mk_book(mk_token("book_A"), nil), mk_book(mk_token("book_B"), nil)};
+    public borrowed_books : set of book := {};
+    public guest_user_login_status : set of student := {};
+    public continued_login_confirmation : set of student := {};
+
+-- 不変条件: 1人が同時に借りられるのは1冊まで
+    inv forall s in set student_login_status & card(s.borrowing_books) <= 1;
+
+
+operations
+
+    public continue:  () ==> ()
+        continue() == (
+            dcl at_continued_login_confirmation: student := 
+                let at in set continued_login_confirmation in at;
+            continued_login_confirmation := continued_login_confirmation \ {at_continued_login_confirmation};
+            history := history ^ [mk_token("continue_0")]; 
+            student_login_status := student_login_status union {at_continued_login_confirmation};
+        );
+
+    public return_book:  token ==> ()
+        return_book(return_booking) == (
+            dcl at_student_login_status: student := 
+                let at in set student_login_status be st 
+                    return_booking in set at.borrowing_books 
+                in at;
+            dcl at_borrowed_books: book := 
+                let at in set borrowed_books be st 
+                    at.book_name = return_booking  
+                in at;
+            student_login_status := student_login_status \ {at_student_login_status};
+            borrowed_books := borrowed_books \ {at_borrowed_books};
+            history := history ^ [mk_token("return_book_0")]; at_borrowed_books.borrower_name := nil;
+            at_student_login_status.borrowing_books := at_student_login_status.borrowing_books \ {return_booking};
+            continued_login_confirmation := continued_login_confirmation union {at_student_login_status};
+            borrowable_books := borrowable_books union {at_borrowed_books};
+        )
+        pre
+            exists x in set student_login_status & return_booking in set x.borrowing_books;
+
+    public borrow_book:  token ==> ()
+        borrow_book(borrow_booking) == (
+            dcl at_student_login_status: student := 
+                let at in set student_login_status be st 
+                    card(at.borrowing_books) = 0
+                in at;
+            dcl at_borrowable_books: book := 
+                let at in set borrowable_books be st 
+                    at.book_name = borrow_booking 
+                in at;
+            student_login_status := student_login_status \ {at_student_login_status};
+            borrowable_books := borrowable_books \ {at_borrowable_books};
+            history := history ^ [mk_token("borrow_book_0")]; 
+            at_borrowable_books.borrower_name := at_student_login_status.human_name;
+            at_student_login_status.borrowing_books := at_student_login_status.borrowing_books union {at_borrowable_books.book_name};
+            student_login_status := student_login_status union {at_student_login_status};
+            continued_login_confirmation := continued_login_confirmation union {at_student_login_status};
+            borrowed_books := borrowed_books union {at_borrowable_books};
+        )
+        pre exists x in set student_login_status & card(x.borrowing_books) = 0;
+
+    -- ================================================================
+    -- 【バグ版】logout_student
+    -- ================================================================
+    -- 正しい仕様: 事前条件が満たされればログアウト可能
+    -- バグ版: 事前条件を到達不能条件 (false) に変更
+    --        → 永遠にログアウトできない！
+    -- ================================================================
+    public logout_student:  () ==> ()
+        logout_student() == (
+            dcl at_continued_login_confirmation: student := 
+                let at in set continued_login_confirmation in at;
+            continued_login_confirmation := continued_login_confirmation \ {at_continued_login_confirmation};
+            history := history ^ [mk_token("logout_student_0")]; at_continued_login_confirmation.login_or_not := false;
+            starting := starting union {at_continued_login_confirmation};
+        )
+        pre
+            -- ★ バグ: 到達不能条件！永遠にログアウトできない
+            false;
+
+end alla

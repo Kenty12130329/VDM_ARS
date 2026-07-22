@@ -1,0 +1,6 @@
+=== Random Search Exploration Statistics ===
+Exploration Time: 78867 ms
+Total Steps Executed: 100
+Max Depth Limit: 10
+Violation Detected: false
+=============================================

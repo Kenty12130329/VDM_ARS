@@ -1,0 +1,223 @@
+class alla
+
+types
+    public book::
+        book_name : token
+        borrower_name : [token];
+
+    -- Reverted to original student type to avoid Z3 translation issues
+    public student::
+        num : nat
+        student_or_not : bool
+        human_name : token
+        borrowing_books : set of token
+        login_or_not : bool;
+
+instance variables
+    public history : seq of token := [];
+    
+    public starting : set of student := {};
+    
+    public student_login_status : set of student := {
+        mk_student(1, true, mk_token("sato"), {}, false), 
+        mk_student(2, true, mk_token("suzuki"), {}, false)
+    };
+    
+    -- Separate state for payment tracking (set of student names who have paid)
+    public paid_students : set of token := {};
+
+    public borrowable_books : set of book := {mk_book(mk_token("book_A"), nil), mk_book(mk_token("book_B"), nil)};
+    public borrowed_books : set of book := {};
+    public guest_user_login_status : set of student := {};
+    public continued_login_confirmation : set of student := {};
+
+    -- 不変条件: 1人が同時に借りられるのは1冊まで
+    inv forall s in set student_login_status & card(s.borrowing_books) <= 1;
+    
+    -- 追加された不変条件: 本を借りている学生は支払い済みでなければならない
+    inv forall s in set student_login_status & (card(s.borrowing_books) > 0 => s.human_name in set paid_students);
+
+operations
+
+    -- =========================================================
+    -- ヘルパー関数: チェックデジット検証
+    -- =========================================================
+    public pure check_payment_logic: nat * nat * nat * nat ==> bool
+    check_payment_logic(comp_code, cust_id, amt, cd) == (
+        return cd = (10 - (
+                -- Amount (6 digits)
+                   ((amt mod 10)*3 +
+                    ((amt div 10) mod 10)*1 +
+                    ((amt div 100) mod 10)*3 +
+                    ((amt div 1000) mod 10)*1 +
+                    ((amt div 10000) mod 10)*3 +
+                    ((amt div 100000) mod 10)*1) +
+
+                -- Customer ID (6 digits)
+                   ((cust_id mod 10)*3 +
+                    ((cust_id div 10) mod 10)*1 +
+                    ((cust_id div 100) mod 10)*3 +
+                    ((cust_id div 1000) mod 10)*1 +
+                    ((cust_id div 10000) mod 10)*3 +
+                    ((cust_id div 100000) mod 10)*1) +
+
+                -- Company Code (6 digits)
+                   ((comp_code mod 10)*3 +
+                    ((comp_code div 10) mod 10)*1 +
+                    ((comp_code div 100) mod 10)*3 +
+                    ((comp_code div 1000) mod 10)*1 +
+                    ((comp_code div 10000) mod 10)*3 +
+                    ((comp_code div 100000) mod 10)*1)
+                ) mod 10) mod 10
+    );
+
+    -- =========================================================
+    -- 新規操作: 会費支払い
+    -- =========================================================
+    public pay_membership_fee: nat * nat * nat * nat * token ==> ()
+    pay_membership_fee(comp_code, cust_id, amt, cd, student_name) == (
+        paid_students := paid_students union {student_name};
+        history := history ^ [mk_token("payment_success")];
+    )
+    pre
+        -- 学生が存在し、未払い確認 + チェックデジット検証
+        exists s in set student_login_status & s.human_name = student_name
+        and student_name not in set paid_students
+        and check_payment_logic(comp_code, cust_id, amt, cd);
+
+
+    -- =========================================================
+    -- 既存の操作
+    -- =========================================================
+
+    public admission:  () ==> ()
+        admission() == (
+            dcl at_starting: student := 
+                let at in set starting be st 
+                    forall p in set starting & at.num <= p.num 
+                in at;
+            starting := starting \ {at_starting};
+            history := history ^ [mk_token("admission_0")]; at_starting.student_or_not := true;
+            starting := starting union {at_starting};
+        )
+        pre
+            (let at in set starting be st forall p in set starting & at.num <= p.num in at).student_or_not = false;
+
+    public return_book:  token ==> ()
+        return_book(return_booking) == (
+            dcl at_student_login_status: student := 
+                let at in set student_login_status be st 
+                    return_booking in set at.borrowing_books 
+                in at;
+            dcl at_borrowed_books: book := 
+                let at in set borrowed_books be st 
+                    at.book_name = return_booking  
+                in at;
+            student_login_status := student_login_status \ {at_student_login_status};
+            borrowed_books := borrowed_books \ {at_borrowed_books};
+            history := history ^ [mk_token("return_book_0")]; at_borrowed_books.borrower_name := nil;
+            at_student_login_status.borrowing_books := at_student_login_status.borrowing_books \ {return_booking};
+            continued_login_confirmation := continued_login_confirmation union {at_student_login_status};
+            borrowable_books := borrowable_books union {at_borrowed_books};
+        )
+        pre
+            exists x in set student_login_status & return_booking in set x.borrowing_books;
+
+    public continue:  () ==> ()
+        continue() == (
+            dcl at_continued_login_confirmation: student := 
+                let at in set continued_login_confirmation in at;
+            continued_login_confirmation := continued_login_confirmation \ {at_continued_login_confirmation};
+            history := history ^ [mk_token("continue_0")]; 
+            student_login_status := student_login_status union {at_continued_login_confirmation};
+        );
+
+    public expulsion:  () ==> ()
+        expulsion() == (
+            dcl at_starting: student := 
+                let at in set starting be st 
+                    forall p in set starting & at.num <= p.num 
+                in at;
+            starting := starting \ {at_starting};
+            history := history ^ [mk_token("expulsion_0")]; at_starting.student_or_not := false;
+            starting := starting union {at_starting};
+        )
+        pre
+            ((let at in set starting be st forall p in set starting & at.num <= p.num in at).student_or_not = true) and (card ((let at in set starting be st forall p in set starting & at.num <= p.num in at).borrowing_books) = 0);
+
+    public login_as_a_guest_user:  () ==> ()
+        login_as_a_guest_user() == (
+            dcl at_starting: student := 
+                let at in set starting be st 
+                    forall p in set starting & at.num <= p.num 
+                in at;
+            starting := starting \ {at_starting};
+            history := history ^ [mk_token("login_as_a_guest_user_0")]; at_starting.login_or_not := true;
+            guest_user_login_status := guest_user_login_status union {at_starting};
+        )
+        pre
+            ((let at in set starting be st forall p in set starting & at.num <= p.num in at).student_or_not = false);
+
+    public logout_guest_user:  () ==> ()
+        logout_guest_user() == (
+            dcl at_guest_user_login_status: student := 
+                let at in set guest_user_login_status in at;
+            guest_user_login_status := guest_user_login_status \ {at_guest_user_login_status};
+            history := history ^ [mk_token("logout_guest_user_0")]; at_guest_user_login_status.login_or_not := false;
+            starting := starting union {at_guest_user_login_status};
+        );
+
+    -- ================================================================
+    -- 【バグ版】borrow_book
+    -- ================================================================
+    -- 正しい仕様: 支払い済み(paid_studentsに含まれる)のみ許可
+    -- バグ版: このチェックを削除
+    -- ================================================================
+    public borrow_book:  token ==> ()
+        borrow_book(borrow_booking) == (
+            dcl at_student_login_status: student := 
+                let at in set student_login_status be st 
+                    -- バグ注入: at.human_name in set paid_students のチェックを削除
+                    card(at.borrowing_books) = 0 
+                in at;
+            dcl at_borrowable_books: book := 
+                let at in set borrowable_books be st 
+                    at.book_name = borrow_booking 
+                in at;
+            student_login_status := student_login_status \ {at_student_login_status};
+            borrowable_books := borrowable_books \ {at_borrowable_books};
+            history := history ^ [mk_token("borrow_book_0")]; at_borrowable_books.borrower_name := at_student_login_status.human_name;
+            at_student_login_status.borrowing_books := at_student_login_status.borrowing_books union {at_borrowable_books.book_name};
+            student_login_status := student_login_status union {at_student_login_status};
+            continued_login_confirmation := continued_login_confirmation union {at_student_login_status};
+            borrowed_books := borrowed_books union {at_borrowable_books};
+        )
+        pre 
+            exists x in set student_login_status & card(x.borrowing_books) = 0;
+            -- バグ注入: pre条件からも paid_students チェックを削除
+
+    public login_as_a_student:  () ==> ()
+        login_as_a_student() == (
+            dcl at_starting: student := 
+                let at in set starting be st 
+                    forall p in set starting & at.num <= p.num 
+                in at;
+            starting := starting \ {at_starting};
+            history := history ^ [mk_token("login_as_a_student_0")]; 
+            student_login_status := student_login_status union {at_starting};
+        )
+        pre
+            ((let at in set starting be st forall p in set starting & at.num <= p.num in at).student_or_not = true);
+
+    public logout_student:  () ==> ()
+        logout_student() == (
+            dcl at_continued_login_confirmation: student := 
+                let at in set continued_login_confirmation in at;
+            continued_login_confirmation := continued_login_confirmation \ {at_continued_login_confirmation};
+            history := history ^ [mk_token("logout_student_0")]; at_continued_login_confirmation.login_or_not := false;
+            starting := starting union {at_continued_login_confirmation};
+        )
+        pre
+            forall a in set continued_login_confirmation & a.login_or_not = true;
+
+end alla

@@ -1,0 +1,180 @@
+-- ================================================================
+-- E3: 在庫マイナスバグ (alla_e3.vdmpp)
+-- ================================================================
+-- 
+-- 【注入されたバグ】
+-- receptionDelivery の事前条件から stock > 0 を削除
+-- 在庫0でも配送処理が実行可能 → stock = -1 になる
+-- 
+-- 正しい仕様: pre stock > 0
+-- バグ版: pre true（在庫チェックなし）
+--
+-- 検出条件: 追加の事後条件が必要
+-- inv forall item in set stockProductSet & item.stock >= 0
+-- ================================================================
+
+class alla
+
+
+
+types
+
+    public stockProduct::
+        product : token
+        stock : int;
+
+    public completedProductNumber::
+        material : token
+        product : token
+        productNum : int;
+
+    public stockMaterial::
+        material : token
+        stock : int;
+
+    public rankDiscount::
+        rankNumber : int
+        discount : rat;
+
+    public saleItems::
+        product : token
+        price : int
+        flag : bool;
+
+    public deliveryPerson::
+        deliveryPersonId : int
+        processCustomerId : [int]
+        deliveryProduct : [token]
+        delieveryFlag : [bool];
+
+    public employee::
+        employeeId : int
+        processCustomerId : [int]
+        processProduct : [token]
+        newStockNum : [int]
+        delieveryFlag : [bool];
+
+    public produceMachine::
+        produceMachineId : int
+        processCustomerId : [int]
+        produceProduct : [token]
+        produceNum : [int];
+
+    public customer::
+        customerId : int
+        balance : int
+        rank : int;
+
+
+
+instance variables
+    public history : seq of token := [];
+    public rankDiscountSet : set of rankDiscount := {mk_rankDiscount(0, 1), mk_rankDiscount(1, 0.8)};
+    public saleItemsSet : set of saleItems := {mk_saleItems(mk_token("product1"), 100, true), mk_saleItems(mk_token("product2"), 200, true)};
+    -- ★ 在庫0の商品を用意
+    public stockProductSet : set of stockProduct := {mk_stockProduct(mk_token("product1"), 0), mk_stockProduct(mk_token("product2"), 1)};
+    public stockMaterialSet : set of stockMaterial := {mk_stockMaterial(mk_token("material1"), 5), mk_stockMaterial(mk_token("material2"), 5)};
+    public completedProductNumberSet : set of completedProductNumber := {mk_completedProductNumber(mk_token("material1"), mk_token("product1"), 1), mk_completedProductNumber(mk_token("material2"), mk_token("product2"), 2)};
+
+    public menuState : set of customer := {mk_customer(0, 200, 0)};
+    public promotionDecisionState : set of customer := {};
+    public managementState : set of employee := {mk_employee(0, nil, nil, nil, nil)};
+    public orderAcceptanceState : set of employee := {};
+    public previousProduceState : set of employee := {};
+    public waitingProduceState : set of employee := {};
+    public checkingProduceState : set of employee := {};
+    public checkingDeliveryState : set of employee := {};
+    public waitingDeliveryState : set of employee := {};
+    -- ★ 配送待ち状態に product1 の注文を配置
+    public previousDeliveryState : set of employee := {mk_employee(1, 0, mk_token("product1"), nil, nil)};
+    public readyProduceState : set of produceMachine := {mk_produceMachine(0, nil, nil, nil)};
+    public produceResultCheckState : set of produceMachine := {};
+    public beforeProduceResultFlagSendState : set of produceMachine := {};
+    public delieveryResultCheckState : set of deliveryPerson := {};
+    public readyDelieveryState : set of deliveryPerson := {mk_deliveryPerson(0, nil, nil, nil)};
+    public beforeDelieveryResultFlagSendState : set of deliveryPerson := {};
+    public closureState : set of employee := {};
+
+-- 不変条件: 顧客の残高は負であってはならない + 在庫も負であってはならない
+    inv forall c in set menuState & c.balance >= 0
+    and forall c in set promotionDecisionState & c.balance >= 0
+    -- ★ 追加の事後条件: 在庫は負であってはならない
+    and forall item in set stockProductSet & item.stock >= 0
+
+
+operations
+
+    -- ================================================================
+    -- 【バグ版】receptionDelivery
+    -- ================================================================
+    -- 正しい仕様: pre stock > 0
+    -- バグ版: stock > 0 条件を削除（在庫0でも配送可能）
+    -- ================================================================
+    public receptionDelivery:  () ==> ()
+        receptionDelivery() == (
+            dcl at_previousDeliveryState: employee := 
+                -- ★ バグ: stock > 0 条件を削除！
+                let at in set previousDeliveryState in at;
+            dcl at_readyDelieveryState: deliveryPerson := 
+                let at in set readyDelieveryState in at;
+            dcl item : stockProduct := 
+                let item in set stockProductSet be st item.product = at_previousDeliveryState.processProduct in item;
+            previousDeliveryState := previousDeliveryState \ {at_previousDeliveryState};
+            readyDelieveryState := readyDelieveryState \ {at_readyDelieveryState};
+            history := history ^ [mk_token("receptionDelivery_0")]; 
+            at_readyDelieveryState.processCustomerId := at_previousDeliveryState.processCustomerId;
+            at_readyDelieveryState.deliveryProduct := at_previousDeliveryState.processProduct;
+            stockProductSet := stockProductSet \ {item};
+            item.stock := item.stock - 1;  -- ★ stock=0 の場合は -1 になる！
+            stockProductSet := stockProductSet union {item};
+            waitingDeliveryState := waitingDeliveryState union {at_previousDeliveryState};
+            delieveryResultCheckState := delieveryResultCheckState union {at_readyDelieveryState};
+        )
+        -- ★ バグ: 在庫チェック条件を削除！
+        pre exists x in set previousDeliveryState & 
+            exists item in set stockProductSet & item.product = x.processProduct;
+            -- 本来は: and item.stock > 0
+
+    public delivery:  () ==> ()
+        delivery() == (
+            dcl at_delieveryResultCheckState: deliveryPerson := 
+                let at in set delieveryResultCheckState in at;
+            delieveryResultCheckState := delieveryResultCheckState \ {at_delieveryResultCheckState};
+            history := history ^ [mk_token("delivery_0")]; 
+            at_delieveryResultCheckState.delieveryFlag := true;
+            beforeDelieveryResultFlagSendState := beforeDelieveryResultFlagSendState union {at_delieveryResultCheckState};
+        );
+
+    public notifyDeliveryResult:  () ==> ()
+        notifyDeliveryResult() == (
+            dcl at_waitingDeliveryState: employee := let at in set waitingDeliveryState in at;
+            dcl at_beforeDelieveryResultFlagSendState: deliveryPerson := 
+                let at in set beforeDelieveryResultFlagSendState be st at.processCustomerId = at_waitingDeliveryState.processCustomerId in at;
+            waitingDeliveryState := waitingDeliveryState \ {at_waitingDeliveryState};
+            beforeDelieveryResultFlagSendState := beforeDelieveryResultFlagSendState \ {at_beforeDelieveryResultFlagSendState};
+            history := history ^ [mk_token("notifyDeliveryResult_0")]; 
+            at_waitingDeliveryState.delieveryFlag := at_beforeDelieveryResultFlagSendState.delieveryFlag;
+            at_beforeDelieveryResultFlagSendState.processCustomerId := nil;
+            at_beforeDelieveryResultFlagSendState.deliveryProduct := nil;
+            at_beforeDelieveryResultFlagSendState.delieveryFlag := nil;
+            checkingDeliveryState := checkingDeliveryState union {at_waitingDeliveryState};
+            readyDelieveryState := readyDelieveryState union {at_beforeDelieveryResultFlagSendState};
+        )
+        pre exists employee in set waitingDeliveryState &
+            exists deliveryPerson in set beforeDelieveryResultFlagSendState &
+            employee.processCustomerId = deliveryPerson.processCustomerId;
+
+    public deliverySuccess:  () ==> ()
+        deliverySuccess() == (
+            dcl at_checkingDeliveryState: employee := 
+                let at in set checkingDeliveryState be st at.delieveryFlag = true in at;
+            checkingDeliveryState := checkingDeliveryState \ {at_checkingDeliveryState};
+            history := history ^ [mk_token("deliverySuccess_0")]; 
+            at_checkingDeliveryState.processCustomerId := nil;
+            at_checkingDeliveryState.processProduct := nil;
+            at_checkingDeliveryState.delieveryFlag := nil;
+            managementState := managementState union {at_checkingDeliveryState};
+        )
+        pre exists employee in set checkingDeliveryState & employee.delieveryFlag = true;
+
+end alla
