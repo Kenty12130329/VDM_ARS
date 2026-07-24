@@ -152,7 +152,8 @@ public class ArsExplorer implements AutoCloseable {
                 break;
             }
 
-            // System.out.println("[ARS] Starting Run " + run + "...");
+            System.out.println(String.format("[ARS Progress] Run %d/%d | Total Steps: %d | Check Objects: %d | Stagnant: %d / %d",
+                    run, maxRuns, totalSteps, convergenceChecker.getVisitedCount(), convergenceChecker.getStagnantSteps(), stagnantThreshold));
             try {
                 // VDMJプロセスの（再）初期化
                 controller.init();
