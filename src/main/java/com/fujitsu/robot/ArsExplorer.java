@@ -310,7 +310,7 @@ public class ArsExplorer implements AutoCloseable {
                     // human_name に mk_token が使われているのでそれを除いた分が borrowing_books。
                     // 従って、card(borrowing_books) = tokenCount - 1
                     int borrowingCount = tokenCount - 1;
-                    System.out.println("    [Debug] borrowingCount: " + borrowingCount);
+                    // System.out.println("    [Debug] borrowingCount: " + borrowingCount);
                     if (borrowingCount > 1) {
                         violationMessage = "Student has borrowed " + borrowingCount
                                 + " books (Limit: 1). Student record: " + studentStr;
