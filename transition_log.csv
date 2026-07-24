@@ -1,4 +1,0 @@
-log
-Run 1, Step 1: Executed borrow_book(mk_token("book_B"))
-Run 1, Step 2: Executed continue()
-Run 1, Step 3: Executed borrow_book(mk_token("book_A"))

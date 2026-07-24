@@ -25,6 +25,7 @@ public class ArsExplorer implements AutoCloseable {
     private int totalSteps = 0;
     private boolean violationDetected = false;
     private String violationMessage = "";
+    private boolean convergenceReached = false;
 
     public ArsExplorer(String jarPath, String vdmPath, String transitionCsvPath) throws Exception {
         this.controller = new ArsVDMController(jarPath, vdmPath);
@@ -117,22 +118,37 @@ public class ArsExplorer implements AutoCloseable {
     }
 
     /**
-     * ランダム探索を実行する。
+     * ランダム探索を実行する（デフォルトの収束閾値 200 ステップを使用）。
      * 
      * @param maxDepth 各パスでの最大深さ
      * @param maxRuns  最大試行回数
      */
     public void explore(int maxDepth, int maxRuns) {
+        explore(maxDepth, maxRuns, 200);
+    }
+
+    /**
+     * 収束判定閾値を指定してランダム探索を実行する。
+     *
+     * @param maxDepth          各パスでの最大深さ
+     * @param maxRuns           最大試行回数
+     * @param stagnantThreshold 収束判定とする連続未増加ステップ数
+     */
+    public void explore(int maxDepth, int maxRuns, int stagnantThreshold) {
         long startTime = System.currentTimeMillis();
         Random rand = new Random();
+        ConvergenceChecker convergenceChecker = new ConvergenceChecker(stagnantThreshold);
 
-        System.out.println("[ARS] Starting Random Search... Max Runs: " + maxRuns + ", Max Depth: " + maxDepth);
+        System.out.println("[ARS] Starting Random Search... Max Runs: " + maxRuns + ", Max Depth: " + maxDepth + ", Stagnant Threshold: " + stagnantThreshold);
 
         // ログファイルのクリア
         clearLogFiles();
 
+        String prevMarking = "-";
+        String prevOp = "-";
+
         for (int run = 1; run <= maxRuns; run++) {
-            if (violationDetected) {
+            if (violationDetected || convergenceReached) {
                 break;
             }
 
@@ -161,10 +177,12 @@ public class ArsExplorer implements AutoCloseable {
                     break;
                 }
 
+                String currentMarking = formatMarking(variables);
+
                 // 変数履歴の記録
                 recordVariableHistory(step, run, variables);
 
-                // 2. 不変条件（Invariant）のチェック
+                // 2. 不変条件（Invariant）のチェック（最優先の即時停止）
                 if (checkInvariants(variables)) {
                     violationDetected = true;
                     System.out.println("[ARS] Invariant violation detected at run " + run + ", step " + step + "!");
@@ -189,11 +207,25 @@ public class ArsExplorer implements AutoCloseable {
                     try {
                         boolean isPreOK = controller.checkPrecondition(command);
                         if (isPreOK) {
+                            // チェック対象（Check Object）の構築と収束判定
+                            CheckObject currentObj = new CheckObject(prevMarking, prevOp, currentMarking, opName);
+                            convergenceChecker.registerCheckObject(currentObj);
+
+                            if (convergenceChecker.isConverged()) {
+                                convergenceReached = true;
+                                System.out.println("[ARS] Convergence criterion met at run " + run + ", step " + step + ".");
+                                System.out.println("[ARS] No new Check Objects discovered in consecutive " + stagnantThreshold + " steps.");
+                                break;
+                            }
+
                             // 6. 実行
                             controller.executeCommand(command);
                             runPath.add(command);
                             transitionLog.add(String.format("Run %d, Step %d: Executed %s", run, step, command));
                             actionTaken = true;
+
+                            prevMarking = currentMarking;
+                            prevOp = opName;
                             System.out.println("  Executed: " + command);
                             break; // 実行に成功したら次のステップへ進む
                         }
@@ -201,6 +233,10 @@ public class ArsExplorer implements AutoCloseable {
                         // エラーが発生した場合も、事前条件不適合とみなすか無視して他を試す
                         System.out.println("  Failed check/execution for: " + command + " (" + e.getMessage() + ")");
                     }
+                }
+
+                if (convergenceReached) {
+                    break;
                 }
 
                 if (!actionTaken) {
@@ -213,7 +249,7 @@ public class ArsExplorer implements AutoCloseable {
         }
 
         long elapsedTime = System.currentTimeMillis() - startTime;
-        exportStatistics(elapsedTime, maxDepth);
+        exportStatistics(elapsedTime, maxDepth, convergenceChecker);
         exportTransitionLog();
         exportVariableHistory();
 
@@ -469,7 +505,22 @@ public class ArsExplorer implements AutoCloseable {
         }
     }
 
-    private void exportStatistics(long elapsedTimeMs, int maxDepth) {
+    /**
+     * 変数状態のマップからマーキング文字列を生成する。
+     */
+    private String formatMarking(Map<String, Value> variables) {
+        if (variables == null || variables.isEmpty()) {
+            return "-";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Value> entry : variables.entrySet()) {
+            if (sb.length() > 0) sb.append(";");
+            sb.append(entry.getKey()).append("=").append(entry.getValue() != null ? entry.getValue().toString() : "-");
+        }
+        return sb.toString();
+    }
+
+    private void exportStatistics(long elapsedTimeMs, int maxDepth, ConvergenceChecker convergenceChecker) {
         try (PrintWriter pw = new PrintWriter(new FileWriter("statistics_summary.txt"))) {
             pw.println("=== Random Search Exploration Statistics ===");
             pw.println("Exploration Time: " + elapsedTimeMs + " ms");
@@ -478,6 +529,12 @@ public class ArsExplorer implements AutoCloseable {
             pw.println("Violation Detected: " + violationDetected);
             if (violationDetected) {
                 pw.println("Violation Details: " + violationMessage);
+            }
+            pw.println("Convergence Reached: " + convergenceReached);
+            if (convergenceChecker != null) {
+                pw.println("Visited Unique Check Objects: " + convergenceChecker.getVisitedCount());
+                pw.println("Stagnant Step Threshold: " + convergenceChecker.getStagnantThreshold());
+                pw.println("Consecutive Stagnant Steps: " + convergenceChecker.getStagnantSteps());
             }
             pw.println("=============================================");
         } catch (IOException e) {

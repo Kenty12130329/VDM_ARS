@@ -4,7 +4,7 @@ import java.io.File;
 
 /**
  * ランダム探索の実行を開始するメインクラス。
- * 使用方法: java com.fujitsu.robot.ArsMain <vdmpp_file> [max_depth] [max_runs]
+ * 使用方法: java com.fujitsu.robot.ArsMain <vdmpp_file> [max_depth] [max_runs] [stagnant_threshold]
  */
 public class ArsMain {
 
@@ -14,7 +14,7 @@ public class ArsMain {
         System.out.println("==========================================");
 
         if (args.length == 0) {
-            System.out.println("使用方法: java com.fujitsu.robot.ArsMain <vdmpp_file> [max_depth] [max_runs]");
+            System.out.println("使用方法: java com.fujitsu.robot.ArsMain <vdmpp_file> [max_depth] [max_runs] [stagnant_threshold]");
             System.out.println("デフォルトとして resources/book.vdmpp を使用します。");
             args = new String[] { "resources/book.vdmpp" };
         }
@@ -22,6 +22,7 @@ public class ArsMain {
         String vdmPath = args[0];
         int maxDepth = 10;
         int maxRuns = 1000; // 不変条件違反を見つけるための十分な試行数
+        int stagnantThreshold = 200; // 収束と判定する連続未更新ステップ数
 
         if (args.length > 1) {
             try {
@@ -39,9 +40,18 @@ public class ArsMain {
             }
         }
 
+        if (args.length > 3) {
+            try {
+                stagnantThreshold = Integer.parseInt(args[3]);
+            } catch (NumberFormatException e) {
+                System.err.println("[Warn] Ignoring unknown stagnant threshold argument: " + args[3]);
+            }
+        }
+
         System.out.println("[Config] VDM File: " + vdmPath);
         System.out.println("[Config] Max Depth: " + maxDepth);
         System.out.println("[Config] Max Runs: " + maxRuns);
+        System.out.println("[Config] Stagnant Threshold: " + stagnantThreshold);
 
         // ファイル存在チェック
         File f = new File(vdmPath);
@@ -70,7 +80,7 @@ public class ArsMain {
         }
 
         try (ArsExplorer explorer = new ArsExplorer(jarPath, vdmPath, transitionCsvPath)) {
-            explorer.explore(maxDepth, maxRuns);
+            explorer.explore(maxDepth, maxRuns, stagnantThreshold);
         } catch (Exception e) {
             System.err.println("[Fatal Error] Exploration aborted due to an unexpected error:");
             e.printStackTrace();
