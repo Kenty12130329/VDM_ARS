@@ -189,7 +189,7 @@ public class ArsVDMController implements VDMController, AutoCloseable {
     public boolean checkPrecondition(String cmd) throws Exception {
         // 実際に実行を試みる。事前条件を満たさない場合はErrorが発生する。
         String res = sendAndReceive("print test." + cmd);
-        System.out.println("  [Debug Pre] cmd: " + cmd + ", res: " + res);
+        // System.out.println("  [Debug Pre] cmd: " + cmd + ", res: " + res);
         
         String trimmedRes = res.trim();
         if (trimmedRes.startsWith("Runtime: Error") || trimmedRes.startsWith("Error ") || 

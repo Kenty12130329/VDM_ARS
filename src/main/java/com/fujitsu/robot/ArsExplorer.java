@@ -152,7 +152,7 @@ public class ArsExplorer implements AutoCloseable {
                 break;
             }
 
-            System.out.println("[ARS] Starting Run " + run + "...");
+            // System.out.println("[ARS] Starting Run " + run + "...");
             try {
                 // VDMJプロセスの（再）初期化
                 controller.init();
@@ -226,12 +226,12 @@ public class ArsExplorer implements AutoCloseable {
 
                             prevMarking = currentMarking;
                             prevOp = opName;
-                            System.out.println("  Executed: " + command);
+                            // System.out.println("  Executed: " + command);
+                            // System.out.println(String.format("[ARS] Run %d Step %d | Visited Check Objects: %d | Stagnant: %d / %d", run, step, convergenceChecker.getVisitedCount(), convergenceChecker.getStagnantSteps(), stagnantThreshold));
                             break; // 実行に成功したら次のステップへ進む
                         }
                     } catch (Exception e) {
-                        // エラーが発生した場合も、事前条件不適合とみなすか無視して他を試す
-                        System.out.println("  Failed check/execution for: " + command + " (" + e.getMessage() + ")");
+                        // System.out.println("  Failed check/execution for: " + command + " (" + e.getMessage() + ")");
                     }
                 }
 
@@ -241,7 +241,7 @@ public class ArsExplorer implements AutoCloseable {
 
                 if (!actionTaken) {
                     // すべての操作が実行不可能（デッドエンド）
-                    System.out.println("  [Dead End] No operations can be executed. Ending run " + run);
+                    // System.out.println("  [Dead End] No operations can be executed. Ending run " + run);
                     transitionLog.add(String.format("Run %d, Step %d: Dead End", run, step));
                     break;
                 }
@@ -253,7 +253,11 @@ public class ArsExplorer implements AutoCloseable {
         exportTransitionLog();
         exportVariableHistory();
 
-        System.out.println("[ARS] Search finished. Total steps: " + totalSteps);
+        System.out.println("[ARS] Search finished in " + elapsedTime + " ms.");
+        System.out.println("[ARS] Total Steps Executed: " + totalSteps);
+        System.out.println("[ARS] Visited Unique Check Objects: " + convergenceChecker.getVisitedCount());
+        System.out.println("[ARS] Violation Detected: " + violationDetected);
+        System.out.println("[ARS] Convergence Reached: " + convergenceReached);
     }
 
     /**
@@ -265,7 +269,7 @@ public class ArsExplorer implements AutoCloseable {
             Value studentLoginStatusVal = variables.get("student_login_status");
             if (studentLoginStatusVal != null) {
                 String studentLoginStatus = studentLoginStatusVal.toString();
-                System.out.println("  [Debug] student_login_status: " + studentLoginStatus);
+                // System.out.println("  [Debug] student_login_status: " + studentLoginStatus);
 
                 // ネストされた括弧を考慮して mk_student(...) を正しく切り出す
                 List<String> students = new ArrayList<>();
@@ -295,7 +299,7 @@ public class ArsExplorer implements AutoCloseable {
                 }
 
                 for (String studentStr : students) {
-                    System.out.println("    [Debug] parsed student record: " + studentStr);
+                    // System.out.println("    [Debug] parsed student record: " + studentStr);
                     // studentStr 内の mk_token の出現回数をカウント
                     int tokenCount = 0;
                     int tokenIdx = 0;
@@ -506,7 +510,7 @@ public class ArsExplorer implements AutoCloseable {
     }
 
     /**
-     * 変数状態のマップからマーキング文字列を生成する。
+     * 変数状態のマップからマスキングされたマーキング文字列（トークン数・状態件数）を生成する。
      */
     private String formatMarking(Map<String, Value> variables) {
         if (variables == null || variables.isEmpty()) {
@@ -515,9 +519,41 @@ public class ArsExplorer implements AutoCloseable {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<String, Value> entry : variables.entrySet()) {
             if (sb.length() > 0) sb.append(";");
-            sb.append(entry.getKey()).append("=").append(entry.getValue() != null ? entry.getValue().toString() : "-");
+            String valStr = entry.getValue() != null ? entry.getValue().toString() : "";
+            int count = countElements(valStr);
+            sb.append(entry.getKey()).append("=#").append(count);
         }
         return sb.toString();
+    }
+
+    /**
+     * 変数値文字列から集合・構造体のトークン数（要素数）を算出する。
+     */
+    private int countElements(String valStr) {
+        if (valStr == null || valStr.trim().isEmpty() || valStr.equals("{}") || valStr.equals("[]")) {
+            return 0;
+        }
+        String trimmed = valStr.trim();
+        if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+            String inner = trimmed.substring(1, trimmed.length() - 1).trim();
+            if (inner.isEmpty()) {
+                return 0;
+            }
+            int depth = 0;
+            int count = 1;
+            for (int i = 0; i < inner.length(); i++) {
+                char c = inner.charAt(i);
+                if (c == '{' || c == '(' || c == '[') {
+                    depth++;
+                } else if (c == '}' || c == ')' || c == ']') {
+                    depth--;
+                } else if (c == ',' && depth == 0) {
+                    count++;
+                }
+            }
+            return count;
+        }
+        return 1;
     }
 
     private void exportStatistics(long elapsedTimeMs, int maxDepth, ConvergenceChecker convergenceChecker) {
