@@ -1,15 +1,9 @@
 -- ================================================================
--- コンビニ収納代行システム - 外部引数モデル 【Bug A: 安全性違反】
--- ConveniPayment44_ext_bug_A.vdmpp
--- 
--- 安全性違反 (Safety Violation):
--- レシート発行(IssueReceipt)時に、支払った請求書を
--- 「未払いリスト(pending_invoices)」から削除し忘れる。
--- これにより、同じ請求書が「未払い」と「支払い済み」の両方に存在することになり、
--- 不変条件 (inv) に違反する。
+-- コンビニ収納代行システム bugA (Scan:DB参照 -> VerifyCheckDigitモデル)
+-- ConveniPayment44_bug_A.vdmpp
 -- ================================================================
 
-class ConveniPayment44_ext
+class ConveniPayment44
 
 types
     -- 請求データベースレコード
@@ -18,7 +12,7 @@ types
         customer_id : nat
         amount : nat;
 
-    -- セッション情報 (stage: 0=NONE, 1=SCANNED, 2=CHECKED, 3=DB_OK, 4=PAID)
+    -- セッション情報 (stage: 0=NONE, 1=SCANNED, 2=VERIFIED, 3=PAID)
     public Session ::
         stage : nat
         comp_code : nat
@@ -28,11 +22,18 @@ types
         paid_amount : nat;
 
 instance variables
-    -- 未払い請求データベース
+    -- 未払い請求データベース (10件)
     public pending_invoices : set of invoice := {
         mk_invoice(123456, 100001, 3000),   -- CD=8
         mk_invoice(123456, 100002, 5500),   -- CD=8
-        mk_invoice(789012, 200001, 12000)   -- CD=3
+        mk_invoice(789012, 200001, 12000),  -- CD=3
+        mk_invoice(123456, 100003, 7200),
+        mk_invoice(123456, 100004, 1500),
+        mk_invoice(789012, 200002, 8900),
+        mk_invoice(789012, 200003, 45000),
+        mk_invoice(345678, 300001, 9800),
+        mk_invoice(345678, 300002, 2100),
+        mk_invoice(345678, 300003, 64000)
     };
     
     -- 支払済み請求
@@ -52,12 +53,9 @@ operations
         current_session := mk_Session(1, comp_code, cust_id, amt, check_digit, 0);
     )
     pre 
-        current_session.stage = 0 
+        current_session.stage = 0
         and
-        -- ガード条件A: モジュラス10 ウェイト3・1 チェックデジット検証
-        check_digit = CheckDigit(comp_code, cust_id, amt)
-        and
-        -- ガード条件B: データベース照合
+        -- 未払いDBに存在する請求書であることを条件にスキャン
         mk_invoice(comp_code, cust_id, amt) in set pending_invoices;
 
     -- 2. チェックデジット検証 (VerifyCheckDigit)
@@ -65,24 +63,21 @@ operations
     VerifyCheckDigit() == (
         current_session.stage := 2;
     )
-    pre current_session.stage = 1;
+    pre 
+        current_session.stage = 1
+        and
+        -- モジュラス10 チェックデジット検証
+        current_session.check_digit = CheckDigit(current_session.comp_code, current_session.cust_id, current_session.amount);
 
-    -- 3. データベース照合 (CheckDB)
-    public CheckDB: () ==> ()
-    CheckDB() == (
-        current_session.stage := 3;
-    )
-    pre current_session.stage = 2;
-
-    -- 4. 支払い実行 (Pay)
+    -- 3. 支払い実行 (Pay)
     public Pay: nat ==> ()
     Pay(cash) == (
-        current_session.stage := 4;
+        current_session.stage := 3;
         current_session.paid_amount := cash;
     )
-    pre current_session.stage = 3 and cash >= current_session.amount;
+    pre current_session.stage = 2 and cash >= current_session.amount;
 
-    -- 5. レシート発行・完了 (IssueReceipt)
+    -- 4. レシート発行・完了 (IssueReceipt)
     public IssueReceipt: () ==> ()
     IssueReceipt() == (
         dcl target_inv: invoice := mk_invoice(current_session.comp_code, current_session.cust_id, current_session.amount);
@@ -94,7 +89,7 @@ operations
         -- セッションリセット
         current_session := mk_Session(0, 0, 0, 0, 0, 0);
     )
-    pre current_session.stage = 4;
+    pre current_session.stage = 3;
 
 functions
     -- モジュラス10ウェイト3・1 計算
@@ -123,4 +118,4 @@ functions
                 ((comp_code div 100000) mod 10)*1)
         ) mod 10) mod 10;
 
-end ConveniPayment44_ext
+end ConveniPayment44
