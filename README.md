@@ -82,7 +82,7 @@ run_ars.bat resources/ConveniPayment44.vdmpp 10 100
 ```bash
 run_ars.bat resources/ConveniPayment44_bug_A.vdmpp 10 100
 ```
-* 結果: モジュラス10計算およびDB適合をランダムで引き当てる確率は天文学的に低いため、100%すべての試行において1ステップ目の Scan(comp_code, cust_id, amt, check_digit) で事前条件エラーとなり、[Dead End] となって探索が即死（ストップ）する限界を証明できます。
+* 結果: モジュラス10計算およびDB適合をランダムで引き当てる確率は天文学的に低いため、100%すべての試行において1ステップ目の Scan(comp_code, cust_id, amt, check_digit) で事前条件エラーとなり、[Dead End] となって探索がストップする。
 
 ---
 
