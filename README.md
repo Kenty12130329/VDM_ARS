@@ -78,7 +78,7 @@ run_ars.bat resources/manual_mutants/book_M1.vdmpp 10 1000
 run_ars.bat resources/ConveniPayment44.vdmpp 10 100
 ```
 
-外部引数チェックデジット制約による探索限界の実証（即死の証明）：
+外部引数チェックデジット制約による探索限界の実証：
 ```bash
 run_ars.bat resources/ConveniPayment44_bug_A.vdmpp 10 100
 ```
