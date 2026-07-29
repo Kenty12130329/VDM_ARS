@@ -1,0 +1,71 @@
+@startuml
+!theme plain
+title システム構成図 (Java_RandomSearch モジュールと入出力)
+
+skinparam componentStyle rectangle
+skinparam linetype ortho
+skinparam ranksep 70
+skinparam nodesep 60
+skinparam packagePadding 15
+skinparam dpi 150
+
+' 外部入力
+package "外部入力" {
+  [VDMモデル (*.vdmpp)] as VdmFile
+  [遷移設定 (*.csv)] as CsvFile
+  [実行パラメータ\n(最大深さ, 最大試行数, 収束閾値)] as Args
+}
+
+' 探索エンジン
+package "探索エンジン" {
+  [メイン制御\n(ArsMain.java)] as Main
+  [ランダム探索制御\n(ArsExplorer.java)] as Explorer
+  [VDMJプロセス制御\n(ArsVDMController.java)] as Controller
+  [チェック対象表現\n(CheckObject.java)] as CheckObj
+  [収束判定器\n(ConvergenceChecker.java)] as Checker
+  [文字列ユーティリティ\n(StringValue.java)] as StrUtil
+}
+
+' 外部ライブラリ
+package "外部ライブラリ" {
+  [VDMJ インタプリタ\n(vdmj-4.6.0.jar)] as VDMJ
+}
+
+' 外部出力
+package "外部出力" {
+  [統計サマリー\n(statistics_summary.txt)] as SummaryReport
+  [違反再現トレース\n(found_trace.txt)] as TraceReport
+  [遷移ログ\n(transition_log.csv)] as TransitionLog
+  [状態変数推移\n(variable_history.csv)] as VarHistory
+}
+
+' レイアウト調整用のダミー配置関係
+VdmFile -[hidden]right-> CsvFile
+CsvFile -[hidden]right-> Args
+
+SummaryReport -[hidden]right-> TraceReport
+TraceReport -[hidden]right-> TransitionLog
+TransitionLog -[hidden]right-> VarHistory
+
+' 入力と設定のフロー
+VdmFile -down-> Main : VDMモデルパス指定
+Args -down-> Main : 探索パラメータ読み込み
+CsvFile -down-> Explorer : 遷移設定読み込み (存在時)
+
+' 内部モジュールの連携フロー
+Main -down-> Explorer : 探索実行指示
+Explorer -down-> Controller : インスタンス化・状態取得\n操作実行要求
+Controller -right-> VDMJ : プロセス通信\n(標準入出力)
+Controller -down-> StrUtil : 変数値文字列パース
+
+' 収束判定とCheck Object追跡フロー
+Explorer -right-> CheckObj : 到達状態と操作の組み合わせ構築\n(Mw, w, Mr, r)
+Explorer -right-> Checker : CheckObject登録と\n収束判定
+
+' 外部出力フロー
+Explorer -down-> SummaryReport : 実行統計・収束結果出力
+Explorer -down-> TraceReport : 違反再現トレース出力
+Explorer -down-> TransitionLog : 実行遷移ログ出力
+Explorer -down-> VarHistory : 全ステップ変数値推移出力
+
+@enduml

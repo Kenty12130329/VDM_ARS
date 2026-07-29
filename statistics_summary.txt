@@ -1,10 +1,11 @@
 === Random Search Exploration Statistics ===
-Exploration Time: 46240 ms
-Total Steps Executed: 79
-Max Depth Limit: 7
-Violation Detected: false
-Convergence Reached: true
-Visited Unique Check Objects: 51
-Stagnant Step Threshold: 5
-Consecutive Stagnant Steps: 5
+Exploration Time: 1621 ms
+Total Steps Executed: 3
+Max Depth Limit: 5
+Violation Detected: true
+Violation Details: Student has borrowed 2 books (Limit: 1). Student record: mk_student(1, true, mk_token("sato"), {mk_token("book_A"), mk_token("book_B")}, false)
+Convergence Reached: false
+Visited Unique Check Objects: 2
+Stagnant Step Threshold: 20
+Consecutive Stagnant Steps: 0
 =============================================

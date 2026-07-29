@@ -1,0 +1,14 @@
+=== Invariant Violation Trace ===
+Reason: Student has borrowed 2 books (Limit: 1). Student record: mk_student(1, true, mk_token("sato"), {mk_token("book_A"), mk_token("book_B")}, false)
+Path taken:
+  Step 0: [Initial State]
+  Step 1: borrow_book(mk_token("book_A"))
+  Step 2: borrow_book(mk_token("book_B"))
+Final State variables:
+  borrowed_books = {mk_book(mk_token("book_A"), mk_token("sato")), mk_book(mk_token("book_B"), mk_token("sato"))}
+  continued_login_confirmation = {mk_student(1, true, mk_token("sato"), {mk_token("book_A"), mk_token("book_B")}, false), mk_student(1, true, mk_token("sato"), {mk_token("book_A")}, false)}
+  borrowable_books = {}
+  student_login_status = {mk_student(1, true, mk_token("sato"), {mk_token("book_A"), mk_token("book_B")}, false), mk_student(2, true, mk_token("suzuki"), {}, false)}
+  starting = {}
+  guest_user_login_status = {}
+=================================
