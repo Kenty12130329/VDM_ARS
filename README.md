@@ -19,15 +19,10 @@
 ## フォルダ構成
 
 * src/main/java/com/fujitsu/robot/
-  * ArsMain.java: エントリーポイント。引数の解析と実行制御を担当。
-  * ArsExplorer.java: ランダム探索のメインループ。引数の自動生成、不変条件の論理評価、収束判定の統括を担当。
+  * ArsMain.java: エントリーポイント。
+  * ArsExplorer.java: ランダム探索のメインループ。引数の自動生成、不変条件の論理評価を担当。
   * ArsVDMController.java: VDMJプロセスとの対話型通信制御、状態ダンプのパースを担当。
-  * CheckObject.java: チェック対象（Mw, w, Mr, r）のデータ構造。
-  * ConvergenceChecker.java: 到達したチェック対象の累積到達数と連続未増分による収束判定を担当。
   * StringValue.java: パース用ユーティリティクラス。
-* docs/
-  * system_architecture_ja.puml: システム構成図（日本語
-  * system_architecture_en.puml: システム構成図（英語版
 * jar/: 依存ライブラリ (vdmj-4.6.0.jar)
 * resources/: 検証対象の VDM-PP モデルファイル
   * book.vdmpp: 図書館モデル（正常系）
